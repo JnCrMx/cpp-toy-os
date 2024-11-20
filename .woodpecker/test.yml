@@ -1,0 +1,63 @@
+variables:
+  - &minio-settings
+    access_key:
+      from_secret: minio_access_key
+    secret_key:
+      from_secret: minio_secret_key
+    endpoint:
+      from_secret: minio_endpoint
+    path_style: true
+    region: eu-central-jcm
+
+steps:
+  build:
+    image: ubuntu:noble
+    commands:
+      - apt-get update
+      - >-
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
+        cmake ninja-build gcc-arm-none-eabi libstdc++-arm-none-eabi-dev libnewlib-dev
+      - mkdir -p build
+      - >-
+        cmake -G Ninja
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        -DCMAKE_C_COMPILER=arm-none-eabi-gcc
+        -DCMAKE_CXX_COMPILER=arm-none-eabi-g++
+        -B build -S . 2>&1 | tee build/cmake-configure.log
+      - cmake --build build --parallel=2 2>&1 | tee build/cmake-build.log
+      - mkdir -p build/upload
+      - cp build/kernel.elf build/upload/kernel.elf
+  upload-logs:
+    image: woodpeckerci/plugin-s3
+    settings:
+      <<: *minio-settings
+      bucket: woodpecker
+      source: build/cmake-*.log
+      strip_prefix: build/
+      target: /artifacts/${CI_REPO}/${CI_PIPELINE_NUMBER}/public/
+    when:
+      - status: [ success, failure ]
+  test:
+    image: ubuntu:noble
+    commands:
+      - apt-get update
+      - >-
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
+        qemu-system-arm
+      - printf "%s\n" "hello" "keqing" "poweroff" | timeout 10 qemu-system-arm -M raspi2b -nographic -kernel build/kernel.elf || true
+  upload:
+    image: woodpeckerci/plugin-s3
+    settings:
+      <<: *minio-settings
+      bucket: woodpecker
+      source: build/upload/*
+      strip_prefix: build/upload/
+      target: /artifacts/${CI_REPO}/${CI_PIPELINE_NUMBER}/public
+  upload-branch:
+    image: woodpeckerci/plugin-s3
+    settings:
+      <<: *minio-settings
+      bucket: woodpecker
+      source: build/upload/*
+      strip_prefix: build/upload/
+      target: /artifacts/${CI_REPO}/${CI_COMMIT_BRANCH}/public
