@@ -105,7 +105,7 @@ interrupt_result handle_exception(interrupt_context& context, void*) {
         debug::kerror(">> Modusspezifische Register <<");
         debug::kerror("User/System | LR: {:#010x} | SP: {:#010x} | CPSR: {}",
             read_register(cpu_mode::usr, cpu_register::lr),
-            read_register(cpu_mode::usr, cpu_register::lr),
+            read_register(cpu_mode::usr, cpu_register::sp),
             psr::current());
         print(cpu_mode::irq);
         print(cpu_mode::abt);
